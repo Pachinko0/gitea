@@ -26,6 +26,7 @@ import (
 type HTTPClient struct {
 	client    *http.Client
 	endpoint  string
+	headers   map[string]string
 	transfers map[string]TransferAdapter
 }
 
@@ -35,6 +36,10 @@ func (c *HTTPClient) BatchSize() int {
 }
 
 func newHTTPClient(endpoint *url.URL, httpTransport *http.Transport) *HTTPClient {
+	return newHTTPClientWithHeaders(endpoint, httpTransport, nil)
+}
+
+func newHTTPClientWithHeaders(endpoint *url.URL, httpTransport *http.Transport, headers map[string]string) *HTTPClient {
 	if httpTransport == nil {
 		httpTransport = &http.Transport{
 			Proxy: proxy.Proxy(),
@@ -45,10 +50,11 @@ func newHTTPClient(endpoint *url.URL, httpTransport *http.Transport) *HTTPClient
 		Transport: httpTransport,
 	}
 
-	basic := &BasicTransferAdapter{hc}
+	basic := &BasicTransferAdapter{client: hc, headers: headers, endpointHost: endpoint.Host}
 	client := &HTTPClient{
 		client:   hc,
 		endpoint: strings.TrimSuffix(endpoint.String(), "/"),
+		headers:  headers,
 		transfers: map[string]TransferAdapter{
 			basic.Name(): basic,
 		},
@@ -87,7 +93,11 @@ func (c *HTTPClient) batch(ctx context.Context, operation string, objects []Poin
 		return nil, err
 	}
 
-	req, err := createRequest(ctx, http.MethodPost, url, map[string]string{"Content-Type": MediaType}, payload)
+	requestHeaders := map[string]string{"Content-Type": MediaType}
+	for key, value := range c.headers {
+		requestHeaders[key] = value
+	}
+	req, err := createRequest(ctx, http.MethodPost, url, requestHeaders, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +252,9 @@ func createRequest(ctx context.Context, method, url string, headers map[string]s
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	req.Header.Set("Accept", AcceptHeader)
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", AcceptHeader)
+	}
 	req.Header.Set("User-Agent", UserAgentHeader)
 
 	return req, nil

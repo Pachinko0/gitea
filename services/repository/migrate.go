@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"gitea.dev/models/db"
@@ -66,6 +68,16 @@ func cloneWiki(ctx context.Context, repo *repo_model.Repository, opts migration.
 	}
 
 	return defaultBranch, nil
+}
+
+// isAzureDevOpsURL reports whether value points to an Azure DevOps service host.
+func isAzureDevOpsURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "dev.azure.com" || strings.HasSuffix(host, ".visualstudio.com")
 }
 
 // MigrateRepositoryGitData starts migrating git related data after created migrating repository
@@ -158,7 +170,11 @@ func MigrateRepositoryGitData(ctx context.Context, u *user_model.User,
 		}
 
 		if opts.LFS {
-			lfsClient, err := lfs.NewClientFromEndpoint(opts.CloneAddr, opts.LFSEndpoint, httpTransport)
+			lfsHeaders := map[string]string(nil)
+			if opts.AuthToken != "" && (isAzureDevOpsURL(opts.CloneAddr) || isAzureDevOpsURL(opts.LFSEndpoint)) {
+				lfsHeaders = map[string]string{"Authorization": "Bearer " + opts.AuthToken, "Accept": "application/vnd.git-lfs"}
+			}
+			lfsClient, err := lfs.NewClientFromEndpointWithHeaders(opts.CloneAddr, opts.LFSEndpoint, httpTransport, lfsHeaders)
 			if err != nil {
 				return repo, fmt.Errorf("NewClientFromEndpoint: %w", err)
 			}

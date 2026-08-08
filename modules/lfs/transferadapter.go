@@ -8,6 +8,8 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/log"
@@ -23,7 +25,28 @@ type TransferAdapter interface {
 
 // BasicTransferAdapter implements the "basic" adapter.
 type BasicTransferAdapter struct {
-	client *http.Client
+	client       *http.Client
+	headers      map[string]string
+	endpointHost string
+}
+
+func (a *BasicTransferAdapter) headersForLink(href string) map[string]string {
+	u, err := url.Parse(href)
+	if err != nil || !strings.EqualFold(u.Host, a.endpointHost) {
+		return nil
+	}
+	return a.headers
+}
+
+func mergeHeaders(base, extra map[string]string) map[string]string {
+	headers := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		headers[key] = value
+	}
+	for key, value := range extra {
+		headers[key] = value
+	}
+	return headers
 }
 
 // Name returns the name of the adapter.
@@ -33,7 +56,7 @@ func (a *BasicTransferAdapter) Name() string {
 
 // Download reads the download location and downloads the data.
 func (a *BasicTransferAdapter) Download(ctx context.Context, l *Link) (io.ReadCloser, error) {
-	req, err := createRequest(ctx, http.MethodGet, l.Href, l.Header, nil)
+	req, err := createRequest(ctx, http.MethodGet, l.Href, mergeHeaders(a.headersForLink(l.Href), l.Header), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +70,7 @@ func (a *BasicTransferAdapter) Download(ctx context.Context, l *Link) (io.ReadCl
 
 // Upload sends the content to the LFS server.
 func (a *BasicTransferAdapter) Upload(ctx context.Context, l *Link, p Pointer, r io.Reader) error {
-	req, err := createRequest(ctx, http.MethodPut, l.Href, l.Header, r)
+	req, err := createRequest(ctx, http.MethodPut, l.Href, mergeHeaders(a.headersForLink(l.Href), l.Header), r)
 	if err != nil {
 		return err
 	}
@@ -75,7 +98,7 @@ func (a *BasicTransferAdapter) Verify(ctx context.Context, l *Link, p Pointer) e
 		return err
 	}
 
-	req, err := createRequest(ctx, http.MethodPost, l.Href, l.Header, bytes.NewReader(b))
+	req, err := createRequest(ctx, http.MethodPost, l.Href, mergeHeaders(a.headersForLink(l.Href), l.Header), bytes.NewReader(b))
 	if err != nil {
 		return err
 	}

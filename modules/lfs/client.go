@@ -28,14 +28,23 @@ type Client interface {
 
 // newClient creates a LFS client
 func newClient(endpoint *url.URL, httpTransport *http.Transport) Client {
+	return newClientWithHeaders(endpoint, httpTransport, nil)
+}
+
+func newClientWithHeaders(endpoint *url.URL, httpTransport *http.Transport, headers map[string]string) Client {
 	if endpoint.Scheme == "file" {
 		return newFilesystemClient(endpoint)
 	}
-	return newHTTPClient(endpoint, httpTransport)
+	return newHTTPClientWithHeaders(endpoint, httpTransport, headers)
 }
 
 // NewClientFromEndpoint creates a LFS client after resolving its endpoint.
 func NewClientFromEndpoint(cloneurl, lfsurl string, httpTransport *http.Transport) (Client, error) {
+	return NewClientFromEndpointWithHeaders(cloneurl, lfsurl, httpTransport, nil)
+}
+
+// NewClientFromEndpointWithHeaders creates a LFS client and applies headers to requests.
+func NewClientFromEndpointWithHeaders(cloneurl, lfsurl string, httpTransport *http.Transport, headers map[string]string) (Client, error) {
 	endpoint := DetermineEndpoint(cloneurl, lfsurl)
 	if endpoint == nil {
 		source := cloneurl
@@ -44,5 +53,5 @@ func NewClientFromEndpoint(cloneurl, lfsurl string, httpTransport *http.Transpor
 		}
 		return nil, fmt.Errorf("unable to determine LFS endpoint from %q", util.SanitizeCredentialURLs(source))
 	}
-	return newClient(endpoint, httpTransport), nil
+	return newClientWithHeaders(endpoint, httpTransport, headers), nil
 }

@@ -67,7 +67,7 @@ func TestBasicTransferAdapter(t *testing.T) {
 	}
 
 	hc := &http.Client{Transport: RoundTripFunc(roundTripHandler)}
-	a := &BasicTransferAdapter{hc}
+	a := &BasicTransferAdapter{client: hc}
 
 	t.Run("Download", func(t *testing.T) {
 		cases := []struct {
@@ -176,4 +176,30 @@ func TestBasicTransferAdapter(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestBasicTransferAdapterScopedHeaders(t *testing.T) {
+	const token = "Bearer test-token"
+	seen := make([]*http.Request, 0, 2)
+	client := &http.Client{Transport: RoundTripFunc(func(req *http.Request) *http.Response {
+		seen = append(seen, req)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("dummy"))}
+	})}
+	adapter := &BasicTransferAdapter{
+		client:       client,
+		headers:      map[string]string{"Authorization": token, "Accept": "application/vnd.git-lfs"},
+		endpointHost: "dev.azure.com",
+	}
+
+	content, err := adapter.Download(t.Context(), &Link{Href: "https://dev.azure.com/org/repo/objects/1"})
+	assert.NoError(t, err)
+	assert.NoError(t, content.Close())
+	content, err = adapter.Download(t.Context(), &Link{Href: "https://storage.example/objects/1"})
+	assert.NoError(t, err)
+	assert.NoError(t, content.Close())
+
+	assert.Equal(t, token, seen[0].Header.Get("Authorization"))
+	assert.Equal(t, "application/vnd.git-lfs", seen[0].Header.Get("Accept"))
+	assert.Empty(t, seen[1].Header.Get("Authorization"))
+	assert.NotEqual(t, "application/vnd.git-lfs", seen[1].Header.Get("Accept"))
 }

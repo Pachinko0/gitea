@@ -5,10 +5,13 @@ package mirror
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"gitea.dev/models/db"
@@ -119,6 +122,11 @@ func SyncPushMirror(ctx context.Context, mirrorID int64) bool {
 	return err == nil
 }
 
+func isAzureDevOpsURL(value *url.URL) bool {
+	host := strings.ToLower(value.Hostname())
+	return host == "dev.azure.com" || strings.HasSuffix(host, ".visualstudio.com")
+}
+
 func runPushSync(ctx context.Context, m *repo_model.PushMirror) error {
 	timeout := time.Duration(setting.Git.Timeout.Mirror) * time.Second
 
@@ -144,7 +152,14 @@ func runPushSync(ctx context.Context, m *repo_model.PushMirror) error {
 			}
 			defer gitRepo.Close()
 
-			lfsClient, err := lfs.NewClientFromEndpoint(remoteURL.String(), "", migrations.NewMigrationHTTPTransport())
+			lfsHeaders := map[string]string(nil)
+			if isAzureDevOpsURL(remoteURL.URL) && remoteURL.User != nil {
+				if token, ok := remoteURL.User.Password(); ok && token != "" {
+					credentials := remoteURL.User.Username() + ":" + token
+					lfsHeaders = map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials)), "Accept": "application/vnd.git-lfs"}
+				}
+			}
+			lfsClient, err := lfs.NewClientFromEndpointWithHeaders(remoteURL.String(), "", migrations.NewMigrationHTTPTransport(), lfsHeaders)
 			if err != nil {
 				return err
 			}
