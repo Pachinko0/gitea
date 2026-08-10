@@ -282,7 +282,7 @@ func performRequest(ctx context.Context, client *http.Client, req *http.Request)
 	}
 	log.Info("LFS response: method=%s target=%s auth=%s status=%s content_type=%q", req.Method, requestTarget, authMode, res.Status, res.Header.Get("Content-Type"))
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		defer res.Body.Close()
 		return res, handleErrorResponse(res)
 	}
