@@ -154,8 +154,9 @@ func runPushSync(ctx context.Context, m *repo_model.PushMirror) error {
 
 			lfsHeaders := map[string]string(nil)
 			if isAzureDevOpsURL(remoteURL.URL) && remoteURL.User != nil {
-				if token, ok := remoteURL.User.Password(); ok && token != "" {
-					lfsHeaders = map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(":"+token)), "Accept": "application/vnd.git-lfs"}
+				if password, ok := remoteURL.User.Password(); ok && password != "" {
+					credentials := remoteURL.User.Username() + ":" + password
+					lfsHeaders = map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials))}
 				}
 			}
 			authMode := "none"
