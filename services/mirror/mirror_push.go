@@ -5,7 +5,6 @@ package mirror
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -155,13 +154,12 @@ func runPushSync(ctx context.Context, m *repo_model.PushMirror) error {
 			lfsHeaders := map[string]string(nil)
 			if isAzureDevOpsURL(remoteURL.URL) && remoteURL.User != nil {
 				if token, ok := remoteURL.User.Password(); ok && token != "" {
-					credentials := remoteURL.User.Username() + ":" + token
-					lfsHeaders = map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials)), "Accept": "application/vnd.git-lfs"}
+					lfsHeaders = map[string]string{"Authorization": "Bearer " + token, "Accept": "application/vnd.git-lfs"}
 				}
 			}
 			authMode := "none"
 			if lfsHeaders != nil {
-				authMode = "basic"
+				authMode = "bearer"
 			}
 			log.Info("Push mirror LFS setup: remote_host=%s remote_path=%s auth=%s", remoteURL.Hostname(), remoteURL.Path, authMode)
 			lfsClient, err := lfs.NewClientFromEndpointWithHeaders(remoteURL.String(), "", migrations.NewMigrationHTTPTransport(), lfsHeaders)
