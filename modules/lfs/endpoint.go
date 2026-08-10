@@ -35,7 +35,11 @@ func endpointFromCloneURL(rawurl string) *url.URL {
 		return ep
 	}
 
+	host := strings.ToLower(ep.Hostname())
+	isAzureDevOps := host == "dev.azure.com" || strings.HasSuffix(host, ".visualstudio.com")
 	if path.Ext(ep.Path) == ".git" {
+		ep.Path += "/info/lfs"
+	} else if isAzureDevOps && strings.Contains(ep.Path, "/_git/") {
 		ep.Path += "/info/lfs"
 	} else {
 		ep.Path += ".git/info/lfs"

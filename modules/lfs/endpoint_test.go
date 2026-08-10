@@ -76,6 +76,11 @@ func TestDetermineEndpoint(t *testing.T) {
 			lfsurl:   "",
 			expected: str2url("https://git.com/owner/repo.git/info/lfs"),
 		},
+		{
+			cloneurl: "https://dev.azure.com/organization/project/_git/repository",
+			lfsurl:   "",
+			expected: str2url("https://dev.azure.com/organization/project/_git/repository/info/lfs"),
+		},
 		// case 9
 		{
 			cloneurl: "",
