@@ -264,7 +264,12 @@ func createRequest(ctx context.Context, method, url string, headers map[string]s
 // If the status code is in the 2xx range, the response is returned, and it will contain a non-nil Body.
 // Otherwise, it will return an error, and the Body will be nil or closed.
 func performRequest(ctx context.Context, client *http.Client, req *http.Request) (*http.Response, error) {
-	log.Trace("performRequest: %s", req.URL)
+	requestTarget := req.URL.Scheme + "://" + req.URL.Host + req.URL.Path
+	authMode := "none"
+	if authorization := req.Header.Get("Authorization"); authorization != "" {
+		authMode = strings.ToLower(strings.SplitN(authorization, " ", 2)[0])
+	}
+	log.Info("LFS request: method=%s target=%s auth=%s accept=%q", req.Method, requestTarget, authMode, req.Header.Get("Accept"))
 	res, err := client.Do(req)
 	if err != nil {
 		select {
@@ -272,9 +277,10 @@ func performRequest(ctx context.Context, client *http.Client, req *http.Request)
 			return res, ctx.Err()
 		default:
 		}
-		log.Error("Error while processing request: %v", err)
+		log.Error("LFS request failed: method=%s target=%s auth=%s error=%v", req.Method, requestTarget, authMode, err)
 		return res, err
 	}
+	log.Info("LFS response: method=%s target=%s auth=%s status=%s content_type=%q", req.Method, requestTarget, authMode, res.Status, res.Header.Get("Content-Type"))
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		defer res.Body.Close()

@@ -270,6 +270,31 @@ func TestHTTPClientDownload(t *testing.T) {
 	}
 }
 
+func TestHTTPClientHeadersAreSentToBatch(t *testing.T) {
+	var got *http.Request
+	hc := &http.Client{Transport: RoundTripFunc(func(req *http.Request) *http.Response {
+		got = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"transfer":"dummy"}`)),
+		}
+	})}
+	client := &HTTPClient{
+		client:   hc,
+		endpoint: "https://dev.azure.com/org/project/_git/repo.git/info/lfs",
+		headers: map[string]string{
+			"Authorization": "Basic dXNlcjpwYXNz",
+			"Accept":        "application/vnd.git-lfs",
+		},
+		transfers: map[string]TransferAdapter{"dummy": &DummyTransferAdapter{}},
+	}
+
+	_, err := client.batch(t.Context(), "upload", []Pointer{{Oid: "oid", Size: 1}})
+	assert.NoError(t, err)
+	assert.Equal(t, "Basic dXNlcjpwYXNz", got.Header.Get("Authorization"))
+	assert.Equal(t, "application/vnd.git-lfs", got.Header.Get("Accept"))
+}
+
 func TestHTTPClientUpload(t *testing.T) {
 	p := Pointer{Oid: "fb8f7d8435968c4f82a726a92395be4d16f2f63116caf36c8ad35c60831ab041", Size: 6}
 

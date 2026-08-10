@@ -159,6 +159,11 @@ func runPushSync(ctx context.Context, m *repo_model.PushMirror) error {
 					lfsHeaders = map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(credentials)), "Accept": "application/vnd.git-lfs"}
 				}
 			}
+			authMode := "none"
+			if lfsHeaders != nil {
+				authMode = "basic"
+			}
+			log.Info("Push mirror LFS setup: remote_host=%s remote_path=%s auth=%s", remoteURL.Hostname(), remoteURL.Path, authMode)
 			lfsClient, err := lfs.NewClientFromEndpointWithHeaders(remoteURL.String(), "", migrations.NewMigrationHTTPTransport(), lfsHeaders)
 			if err != nil {
 				return err
