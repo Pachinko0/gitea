@@ -128,7 +128,11 @@ func EditWikiPage(ctx *context.APIContext) {
 
 	form := web.GetForm[*api.CreateWikiPageOptions](ctx)
 
-	oldWikiName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	oldWikiName, err := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	if err != nil {
+		ctx.APIError(http.StatusBadRequest, err.Error())
+		return
+	}
 	newWikiName := wiki_service.UserTitleToWebPath("", form.Title)
 
 	if len(newWikiName) == 0 {
@@ -234,7 +238,11 @@ func DeleteWikiPage(ctx *context.APIContext) {
 	//   "423":
 	//     "$ref": "#/responses/repoArchivedError"
 
-	wikiName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	wikiName, err := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	if err != nil {
+		ctx.APIError(http.StatusBadRequest, err.Error())
+		return
+	}
 
 	if err := wiki_service.DeleteWikiPage(ctx, ctx.Doer, ctx.Repo.Repository, wikiName); err != nil {
 		ctx.APIErrorAuto(err)
@@ -356,7 +364,11 @@ func GetWikiPage(ctx *context.APIContext) {
 	//     "$ref": "#/responses/notFound"
 
 	// get requested pagename
-	pageName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	pageName, err := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	if err != nil {
+		ctx.APIError(http.StatusBadRequest, err.Error())
+		return
+	}
 
 	wikiPage := getWikiPage(ctx, pageName)
 	if !ctx.Written() {
@@ -406,7 +418,11 @@ func ListPageRevisions(ctx *context.APIContext) {
 	}
 
 	// get requested pagename
-	pageName := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	pageName, err := wiki_service.WebPathFromRequest(ctx.PathParamRaw("pageName"))
+	if err != nil {
+		ctx.APIError(http.StatusBadRequest, err.Error())
+		return
+	}
 	if len(pageName) == 0 {
 		pageName = "Home"
 	}

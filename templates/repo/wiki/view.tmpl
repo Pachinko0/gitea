@@ -21,9 +21,7 @@
 						<div class="scrolling menu">
 							<a class="item muted" href="{{.RepoLink}}/wiki/?action=_pages">{{ctx.Locale.Tr "repo.wiki.pages"}}</a>
 							<div class="divider"></div>
-							{{range .Pages}}
-								<a class="item {{if eq $.Title .Name}}selected{{end}}" href="{{$.RepoLink}}/wiki/{{.SubURL}}">{{.Name}}</a>
-							{{end}}
+							{{template "repo/wiki/tree" .}}
 						</div>
 					</div>
 				</div>
@@ -49,7 +47,7 @@
 					{{end}}
 					{{if and .CanWriteWiki (not .Repository.IsMirror)}}
 						<a class="ui small button" href="{{.RepoLink}}/wiki/{{.PageURL}}?action=_edit">{{ctx.Locale.Tr "repo.wiki.edit_page_button"}}</a>
-						<a class="ui small primary button" href="{{.RepoLink}}/wiki?action=_new">{{ctx.Locale.Tr "repo.wiki.new_page_button"}}</a>
+						<a class="ui small primary button" href="{{.RepoLink}}/wiki/{{.PageDir}}?action=_new">{{ctx.Locale.Tr "repo.wiki.new_page_button"}}</a>
 						<a class="ui small red button link-action" href data-modal-confirm="#repo-wiki-delete-page-modal" data-url="{{.RepoLink}}/wiki/{{.PageURL}}?action=_delete">{{ctx.Locale.Tr "repo.wiki.delete_page_button"}}</a>
 					{{end}}
 				</div>
@@ -103,3 +101,37 @@
 </div>
 
 {{template "base/footer" .}}
+
+{{define "repo/wiki/tree"}}
+	<ul class="tw-m-0 tw-pl-4">
+		{{range .WikiTree}}
+			<li>
+				{{if .IsDir}}
+					<details{{if .Open}} open{{end}}>
+						<summary>{{svg "octicon-file-directory-fill"}} <a href="{{$.RepoLink}}/wiki/{{.SubURL}}?action=_pages">{{.Name}}</a></summary>
+						{{template "repo/wiki/tree-nodes" dict "Nodes" .Children "Root" $}}
+					</details>
+				{{else}}
+					<a class="{{if eq $.PageURL .SubURL}}selected{{end}}" href="{{$.RepoLink}}/wiki/{{.SubURL}}">{{svg "octicon-file"}} {{.Name}}</a>
+				{{end}}
+			</li>
+		{{end}}
+	</ul>
+{{end}}
+
+{{define "repo/wiki/tree-nodes"}}
+	<ul class="tw-m-0 tw-pl-4">
+		{{range .Nodes}}
+			<li>
+				{{if .IsDir}}
+					<details{{if .Open}} open{{end}}>
+						<summary>{{svg "octicon-file-directory-fill"}} <a href="{{$.Root.RepoLink}}/wiki/{{.SubURL}}?action=_pages">{{.Name}}</a></summary>
+						{{template "repo/wiki/tree-nodes" dict "Nodes" .Children "Root" $.Root}}
+					</details>
+				{{else}}
+					<a class="{{if eq $.Root.PageURL .SubURL}}selected{{end}}" href="{{$.Root.RepoLink}}/wiki/{{.SubURL}}">{{svg "octicon-file"}} {{.Name}}</a>
+				{{end}}
+			</li>
+		{{end}}
+	</ul>
+{{end}}
