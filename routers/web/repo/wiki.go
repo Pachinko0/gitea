@@ -244,19 +244,33 @@ func wikiContentsByEntry(ctx *context.Context, wikiRepo *git.Repository, entry *
 // The last return value indicates whether the file should be returned as a raw file
 func wikiEntryByName(ctx *context.Context, wikiRepo *git.Repository, commit *git.Commit, wikiName wiki_service.WebPath) (*git.TreeEntry, string, bool, bool) {
 	isRaw := false
-	gitFilename := wiki_service.WebPathToGitPath(wikiName)
-	entry, err := findEntryForFile(ctx, wikiRepo, commit, gitFilename)
-	if err != nil && !git.IsErrNotExist(err) {
-		ctx.ServerError("findEntryForFile", err)
-		return nil, "", false, false
-	}
-	if entry == nil {
-		// check if the file without ".md" suffix exists
-		gitFilename := strings.TrimSuffix(gitFilename, ".md")
-		entry, err = findEntryForFile(ctx, wikiRepo, commit, gitFilename)
+	gitFilenames := wiki_service.WebPathToGitPathCandidates(wikiName)
+	var entry *git.TreeEntry
+	var err error
+	gitFilename := gitFilenames[0]
+	for _, candidate := range gitFilenames {
+		entry, err = findEntryForFile(ctx, wikiRepo, commit, candidate)
 		if err != nil && !git.IsErrNotExist(err) {
 			ctx.ServerError("findEntryForFile", err)
 			return nil, "", false, false
+		}
+		if entry != nil {
+			gitFilename = candidate
+			break
+		}
+	}
+	if entry == nil {
+		// check if the file without ".md" suffix exists
+		for _, candidate := range gitFilenames {
+			gitFilename = strings.TrimSuffix(candidate, ".md")
+			entry, err = findEntryForFile(ctx, wikiRepo, commit, gitFilename)
+			if err != nil && !git.IsErrNotExist(err) {
+				ctx.ServerError("findEntryForFile", err)
+				return nil, "", false, false
+			}
+			if entry != nil {
+				break
+			}
 		}
 		isRaw = true
 	}
@@ -352,10 +366,16 @@ func renderViewPage(ctx *context.Context) (*git.Repository, *git.TreeEntry) {
 	// lookup filename in wiki - get gitTree entry , real filename
 	entry, pageFilename, noEntry, isRaw := wikiEntryByName(ctx, wikiGitRepo, commit, pageName)
 	if noEntry {
-		dirEntry, err := commit.GetTreeEntryByPath(ctx, wikiGitRepo, wiki_service.WebDirPathToGitPath(pageName))
-		if err == nil && dirEntry.IsDir() {
-			ctx.Redirect(ctx.Repo.RepoLink + "/wiki/" + wiki_service.WebPathToURLPath(pageName) + "?action=_pages")
-			return nil, nil
+		for _, dirPath := range wiki_service.WebDirPathToGitPathCandidates(pageName) {
+			dirEntry, err := commit.GetTreeEntryByPath(ctx, wikiGitRepo, dirPath)
+			if err == nil && dirEntry.IsDir() {
+				ctx.Redirect(ctx.Repo.RepoLink + "/wiki/" + wiki_service.WebPathToURLPath(pageName) + "?action=_pages")
+				return nil, nil
+			}
+			if err != nil && !git.IsErrNotExist(err) {
+				ctx.ServerError("GetTreeEntryByPath", err)
+				return nil, nil
+			}
 		}
 		ctx.Redirect(ctx.Repo.RepoLink + "/wiki/?action=_pages")
 	}
@@ -365,6 +385,7 @@ func renderViewPage(ctx *context.Context) (*git.Repository, *git.TreeEntry) {
 	if entry == nil || ctx.Written() {
 		return nil, nil
 	}
+	ctx.Data["WikiGitPath"] = pageFilename
 
 	// get page content
 	data := wikiContentsByEntry(ctx, wikiGitRepo, entry)
@@ -475,6 +496,7 @@ func renderRevisionPage(ctx *context.Context) (*git.Repository, *git.TreeEntry) 
 	if entry == nil || ctx.Written() {
 		return nil, nil
 	}
+	ctx.Data["WikiGitPath"] = pageFilename
 
 	// get commit count - wiki revisions
 	commitsCount, _ := git.FileCommitsCount(ctx, ctx.Repo.Repository.WikiStorageRepo(), ctx.Repo.Repository.DefaultWikiBranch, pageFilename)
@@ -630,7 +652,10 @@ func Wiki(ctx *context.Context) {
 		return
 	}
 	wikiName = util.IfZero(wikiName, "Home")
-	wikiPath := wiki_service.WebPathToGitPath(wikiName)
+	wikiPath, ok := ctx.Data["WikiGitPath"].(string)
+	if !ok {
+		wikiPath = wiki_service.WebPathToGitPath(wikiName)
+	}
 	detectedRender := markup.DetectRendererTypeByFilename(wikiPath)
 	if detectedRender == nil || detectedRender.Name() != markdown.MarkupName {
 		ctx.Data["FormatWarning"] = "File extension " + path.Ext(wikiPath) + " is not supported at the moment. Rendered as Markdown."
@@ -673,7 +698,10 @@ func WikiRevision(ctx *context.Context) {
 		return
 	}
 	wikiName = util.IfZero(wikiName, "Home")
-	wikiPath := wiki_service.WebPathToGitPath(wikiName)
+	wikiPath, ok := ctx.Data["WikiGitPath"].(string)
+	if !ok {
+		wikiPath = wiki_service.WebPathToGitPath(wikiName)
+	}
 	lastCommit, err := wikiGitRepo.GetCommitByPath(ctx, wikiPath)
 	if err != nil {
 		ctx.ServerError("GetCommitByPath", err)
@@ -705,10 +733,21 @@ func WikiPages(ctx *context.Context) {
 		ctx.NotFound(err)
 		return
 	}
-	treePath := wiki_service.WebDirPathToGitPath(dirPath)
-	tree, err := commit.SubTree(ctx, wikiGitRepo, treePath)
-	if err != nil {
-		ctx.ServerError("SubTree", err)
+	var tree *git.Tree
+	treePath := ""
+	for _, candidate := range wiki_service.WebDirPathToGitPathCandidates(dirPath) {
+		tree, err = commit.SubTree(ctx, wikiGitRepo, candidate)
+		if err == nil {
+			treePath = candidate
+			break
+		}
+		if !git.IsErrNotExist(err) {
+			ctx.ServerError("SubTree", err)
+			return
+		}
+	}
+	if tree == nil {
+		ctx.NotFound(err)
 		return
 	}
 
